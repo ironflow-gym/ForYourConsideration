@@ -21,7 +21,7 @@ const App: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   
-  const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === "undefined";
+  const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === "undefined" || process.env.API_KEY === "MISSING";
 
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
     if (LATEST_VERIFIED_AWARDS) {
@@ -72,7 +72,7 @@ const App: React.FC = () => {
 
   const handleSearch = async (awardName: string, year: number) => {
     if (isApiKeyMissing) {
-      alert("API Key is missing. Please add API_KEY to your Netlify Environment Variables for this feature to work.");
+      alert("API Key is missing. Please add API_KEY to your GitHub Secrets for this feature to work.");
       return;
     }
     setIsGlobalLoading(true);
@@ -84,7 +84,7 @@ const App: React.FC = () => {
       setViewMode(ViewMode.CATEGORY);
     } catch (error) {
       console.error("Failed to fetch award data:", error);
-      alert("Search failed. Ensure your API Key is valid and has Search Grounding enabled.");
+      alert("Search failed. Ensure your API Key is valid and has Google Search grounding enabled.");
     } finally {
       setIsGlobalLoading(false);
     }
@@ -221,7 +221,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-stone-950 pb-32">
       {isApiKeyMissing && (
         <div className="bg-red-900/50 border-b border-red-500/30 p-2 text-center text-[10px] font-bold uppercase tracking-widest text-red-200">
-          Warning: API Key is not configured in Netlify settings. Search and Detail features will be limited.
+          Warning: API Key is not configured in GitHub Secrets. Search and Detail features will be limited.
         </div>
       )}
       <header className="sticky top-0 z-40 bg-stone-950/90 backdrop-blur-md border-b border-stone-800 py-4 px-6">
