@@ -1,0 +1,7 @@
+{
+  "name": "For Your Consideration v1.1.5",
+  "description": "A sophisticated PWA for tracking movie awards and nominations. Fetch data for any award show and year, predict winners, track seen movies, and get detailed insights powered by Gemini.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
