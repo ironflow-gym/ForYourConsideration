@@ -1,4 +1,3 @@
-
 {
   "short_name": "FYC",
   "name": "For Your Consideration",
@@ -15,7 +14,7 @@
       "purpose": "maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "./",
   "display": "standalone",
   "theme_color": "#0c0a09",
   "background_color": "#0c0a09",

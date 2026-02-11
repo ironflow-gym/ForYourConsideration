@@ -1,9 +1,8 @@
-
-const CACHE_NAME = 'fyc-v1.4-cache';
+const CACHE_NAME = 'fyc-v1.5-cache';
 const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+  './',
+  './index.html',
+  './manifest.json'
 ];
 
 // Caches assets on install
@@ -35,9 +34,9 @@ self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
-  // We want to cache everything from esm.sh to ensure React works offline
-  const isEsmSh = event.request.url.includes('esm.sh');
-  const isCdn = event.request.url.includes('cdn.tailwindcss.com') || event.request.url.includes('fonts.googleapis.com');
+  const url = event.request.url;
+  const isEsmSh = url.includes('esm.sh');
+  const isCdn = url.includes('cdn.tailwindcss.com') || url.includes('fonts.googleapis.com');
 
   event.respondWith(
     caches.match(event.request)
@@ -60,7 +59,7 @@ self.addEventListener('fetch', (event) => {
       .catch(() => {
         // Fallback for navigation requests when offline
         if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+          return caches.match('./index.html');
         }
       })
   );
