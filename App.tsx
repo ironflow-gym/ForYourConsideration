@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { AwardData, ViewMode, FilterMode, Nominee, AwardStatus } from './types';
 import MovieDetailModal from './components/MovieDetailModal';
@@ -213,11 +214,9 @@ const App: React.FC = () => {
              </div>
              <div className="min-w-0">
                 <h1 className="text-xl md:text-2xl font-black tracking-tighter text-white leading-none serif gold-gradient uppercase truncate">For Your Consideration</h1>
-                <div className="mt-2 space-y-1.5">
+                <div className="mt-2 space-y-1.5 flex items-center gap-3">
                   <p className="text-stone-400 text-[11px] md:text-xs uppercase font-bold tracking-[0.15em] truncate">{currentAward.name} {currentAward.year}</p>
-                  <div className="flex">
-                    {getStatusBadge(currentAward.status)}
-                  </div>
+                  {getStatusBadge(currentAward.status)}
                 </div>
              </div>
           </div>
@@ -385,7 +384,7 @@ const App: React.FC = () => {
           <div className="max-w-4xl mx-auto space-y-4 animate-in fade-in duration-500">
             <div className="text-center mb-8">
               <h2 className="text-3xl font-black serif text-white mb-2 tracking-tight">The Winners Circle</h2>
-              <p className="text-stone-400 text-[11px] md:text-xs font-bold uppercase tracking-widest">Your Predictions for the 98th Academy Awards</p>
+              <p className="text-stone-400 text-[11px] md:text-xs font-bold uppercase tracking-widest">Your Predictions for {currentAward.name}</p>
             </div>
             {predictions.length === 0 ? (
               <div className="py-20 text-center border-2 border-dashed border-stone-800 rounded-3xl">
