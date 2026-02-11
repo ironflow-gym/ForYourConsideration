@@ -1,8 +1,17 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { AwardData, MovieDetails } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy-initialize the AI client to prevent top-level crashes if API_KEY is missing/invalid
+let aiInstance: GoogleGenAI | null = null;
+const getAI = () => {
+  if (!aiInstance) {
+    const key = process.env.API_KEY;
+    // We provide a fallback string only to prevent the constructor from throwing immediately.
+    // The actual API call will fail with a 401 if the key is 'MISSING', which we handle in the UI.
+    aiInstance = new GoogleGenAI({ apiKey: key && key !== "undefined" ? key : 'MISSING' });
+  }
+  return aiInstance;
+};
 
 /**
  * Fetches award data with strict verification of official status using Search Grounding.
@@ -15,7 +24,6 @@ export const fetchAwardData = async (awardName: string, year: number): Promise<A
   if (cached) {
     try {
       const parsedCache = JSON.parse(cached);
-      // Only use cache if it's less than 24 hours old
       if (Date.now() - parsedCache.lastUpdated < 86400000) {
         return parsedCache;
       }
@@ -24,6 +32,7 @@ export const fetchAwardData = async (awardName: string, year: number): Promise<A
     }
   }
 
+  const ai = getAI();
   const prompt = `Task: Retrieve the data for the ${awardName} in the year ${year}.
 
   STRICT OPERATING PROCEDURES:
@@ -128,6 +137,7 @@ export const fetchMovieDetails = async (title: string, year?: number, country?: 
     }
   }
 
+  const ai = getAI();
   const yearContext = year ? ` released around ${year}` : '';
   const countryContext = country ? ` produced in ${country}` : '';
   const prompt = `Provide detailed movie information for the film "${title}"${yearContext}${countryContext}. Ensure you identify the correct version of the film if multiple exist. Include director, cast, summary, rating, and year. Return JSON.`;

@@ -5,7 +5,6 @@ import AwardSearch from './components/AwardSearch';
 import { fetchAwardData } from './services/geminiService';
 import { LATEST_VERIFIED_AWARDS } from './constants';
 
-// Helper for deterministic posters
 const getPosterUrl = (title: string, size: 'small' | 'large' = 'small') => {
   const seed = encodeURIComponent(title.toLowerCase().trim());
   const dimensions = size === 'small' ? '80/120' : '240/360';
@@ -22,6 +21,8 @@ const App: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
   
+  const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === "undefined";
+
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
     if (LATEST_VERIFIED_AWARDS) {
       return new Set(LATEST_VERIFIED_AWARDS.categories.map(c => c.id));
@@ -29,7 +30,6 @@ const App: React.FC = () => {
     return new Set();
   });
 
-  // Load interactions
   useEffect(() => {
     const saved = localStorage.getItem('fyc_interactions_v2');
     if (saved && currentAward) {
@@ -51,7 +51,6 @@ const App: React.FC = () => {
     }
   }, [currentAward?.id]);
 
-  // Sync interactions
   useEffect(() => {
     if (currentAward) {
       const interactions: Record<string, any> = JSON.parse(localStorage.getItem('fyc_interactions_v2') || '{}');
@@ -72,6 +71,10 @@ const App: React.FC = () => {
   }, [currentAward]);
 
   const handleSearch = async (awardName: string, year: number) => {
+    if (isApiKeyMissing) {
+      alert("API Key is missing. Please add API_KEY to your Netlify Environment Variables for this feature to work.");
+      return;
+    }
     setIsGlobalLoading(true);
     try {
       const data = await fetchAwardData(awardName, year);
@@ -81,7 +84,7 @@ const App: React.FC = () => {
       setViewMode(ViewMode.CATEGORY);
     } catch (error) {
       console.error("Failed to fetch award data:", error);
-      alert("Could not retrieve data for that award. Please try a major ceremony like 'Oscars' or 'Golden Globes'.");
+      alert("Search failed. Ensure your API Key is valid and has Search Grounding enabled.");
     } finally {
       setIsGlobalLoading(false);
     }
@@ -216,6 +219,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-stone-950 pb-32">
+      {isApiKeyMissing && (
+        <div className="bg-red-900/50 border-b border-red-500/30 p-2 text-center text-[10px] font-bold uppercase tracking-widest text-red-200">
+          Warning: API Key is not configured in Netlify settings. Search and Detail features will be limited.
+        </div>
+      )}
       <header className="sticky top-0 z-40 bg-stone-950/90 backdrop-blur-md border-b border-stone-800 py-4 px-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 cursor-pointer" onClick={() => { setShowSearch(false); setViewMode(ViewMode.CATEGORY); }}>
