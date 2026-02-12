@@ -30,7 +30,15 @@ const App: React.FC = () => {
   const [isRoasting, setIsRoasting] = useState(false);
   const [hasRoastedIds, setHasRoastedIds] = useState<Set<string>>(new Set());
 
-  const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === "undefined" || process.env.API_KEY === "MISSING";
+  // Robust check for API key replacement from Vite
+  const isApiKeyMissing = (() => {
+    try {
+      const key = process.env.API_KEY;
+      return !key || key === "undefined" || key === "MISSING";
+    } catch {
+      return true;
+    }
+  })();
 
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
     if (LATEST_VERIFIED_AWARDS) {
@@ -49,68 +57,91 @@ const App: React.FC = () => {
 
   const isLocked = useMemo(() => {
     if (!currentAward || !currentAward.ceremonyDate) return false;
-    const ceremonyTime = new Date(currentAward.ceremonyDate).getTime();
-    return now >= ceremonyTime;
+    try {
+        const ceremonyTime = new Date(currentAward.ceremonyDate).getTime();
+        return now >= ceremonyTime;
+    } catch {
+        return false;
+    }
   }, [currentAward, now]);
 
   const timeLeft = useMemo(() => {
     if (!currentAward || !currentAward.ceremonyDate) return null;
-    const diff = new Date(currentAward.ceremonyDate).getTime() - now;
-    if (diff <= 0) return null;
+    try {
+        const diff = new Date(currentAward.ceremonyDate).getTime() - now;
+        if (diff <= 0) return null;
 
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-    return { days, hours, minutes, seconds };
+        return { days, hours, minutes, seconds };
+    } catch {
+        return null;
+    }
   }, [currentAward, now]);
 
+  // Load Saved State with Error Boundaries
   useEffect(() => {
-    const saved = localStorage.getItem('fyc_interactions_v2');
-    if (saved && currentAward) {
-      const interactions = JSON.parse(saved);
-      const newData = { ...currentAward };
-      let changed = false;
-      newData.categories.forEach(cat => {
-        cat.nominees.forEach(nom => {
-          const key = `${currentAward.year}_${nom.movieTitle}_${cat.name}`;
-          if (interactions[key]) {
-            nom.seen = interactions[key].seen || false;
-            nom.predictionRank = interactions[key].rank || 0;
-            nom.userResult = interactions[key].result || 'pending';
-            changed = true;
-          }
-        });
-      });
-      if (changed) setCurrentAward(newData);
+    if (!currentAward) return;
+
+    try {
+        const saved = localStorage.getItem('fyc_interactions_v2');
+        if (saved) {
+          const interactions = JSON.parse(saved);
+          const newData = { ...currentAward };
+          let changed = false;
+          newData.categories.forEach(cat => {
+            cat.nominees.forEach(nom => {
+              const key = `${currentAward.year}_${nom.movieTitle}_${cat.name}`;
+              if (interactions[key]) {
+                nom.seen = interactions[key].seen || false;
+                nom.predictionRank = interactions[key].rank || 0;
+                nom.userResult = interactions[key].result || 'pending';
+                changed = true;
+              }
+            });
+          });
+          if (changed) setCurrentAward(newData);
+        }
+    } catch (e) {
+        console.warn("Failed to parse interactions from local storage", e);
     }
     
-    // Load roast memory
-    const savedRoasts = localStorage.getItem('fyc_roasts_v2');
-    if (savedRoasts) {
-        const { text, ids } = JSON.parse(savedRoasts);
-        setRoastText(text || '');
-        setHasRoastedIds(new Set(ids || []));
+    try {
+        const savedRoasts = localStorage.getItem('fyc_roasts_v2');
+        if (savedRoasts) {
+            const { text, ids } = JSON.parse(savedRoasts);
+            setRoastText(text || '');
+            setHasRoastedIds(new Set(ids || []));
+        }
+    } catch (e) {
+        console.warn("Failed to parse roasts from local storage", e);
     }
   }, [currentAward?.id]);
 
+  // Save State
   useEffect(() => {
     if (currentAward) {
-      const interactions: Record<string, any> = JSON.parse(localStorage.getItem('fyc_interactions_v2') || '{}');
-      currentAward.categories.forEach(cat => {
-        cat.nominees.forEach(nom => {
-          if (nom.seen || nom.predictionRank > 0 || (nom.userResult && nom.userResult !== 'pending')) {
-            const key = `${currentAward.year}_${nom.movieTitle}_${cat.name}`;
-            interactions[key] = {
-              seen: nom.seen,
-              rank: nom.predictionRank,
-              result: nom.userResult
-            };
-          }
-        });
-      });
-      localStorage.setItem('fyc_interactions_v2', JSON.stringify(interactions));
+      try {
+          const interactions: Record<string, any> = JSON.parse(localStorage.getItem('fyc_interactions_v2') || '{}');
+          currentAward.categories.forEach(cat => {
+            cat.nominees.forEach(nom => {
+              if (nom.seen || nom.predictionRank > 0 || (nom.userResult && nom.userResult !== 'pending')) {
+                const key = `${currentAward.year}_${nom.movieTitle}_${cat.name}`;
+                interactions[key] = {
+                  seen: nom.seen,
+                  rank: nom.predictionRank,
+                  result: nom.userResult
+                };
+              }
+            });
+          });
+          localStorage.setItem('fyc_interactions_v2', JSON.stringify(interactions));
+      } catch (e) {
+          console.error("Critical: Failed to save interactions", e);
+      }
     }
   }, [currentAward]);
 
@@ -171,7 +202,7 @@ const App: React.FC = () => {
 
   const handleSearch = async (awardName: string, year: number) => {
     if (isApiKeyMissing) {
-      alert("API Key is missing. Please add API_KEY to your GitHub Secrets for this feature to work.");
+      alert("API Key is missing. Please add API_KEY to your Secrets for this feature to work.");
       return;
     }
     setIsGlobalLoading(true);
@@ -325,7 +356,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-stone-950 pb-32">
       {isApiKeyMissing && (
         <div className="bg-red-900/50 border-b border-red-500/30 p-2 text-center text-[10px] font-bold uppercase tracking-widest text-red-200">
-          Warning: API Key is not configured in GitHub Secrets. Search and Detail features will be limited.
+          Warning: API Key is not configured. Features will be limited.
         </div>
       )}
       <header className="sticky top-0 z-40 bg-stone-950/90 backdrop-blur-md border-b border-stone-800 py-4 px-6">
