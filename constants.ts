@@ -1,4 +1,3 @@
-
 import { AwardData } from './types';
 
 /**
@@ -9,6 +8,7 @@ export const LATEST_VERIFIED_AWARDS: AwardData = {
   id: 'oscars-2026-definitive',
   name: '98th Academy Awards',
   year: 2026,
+  ceremonyDate: '2026-03-15T23:00:00Z', // 7 PM EDT March 15th is 11 PM UTC
   announced: false,
   status: 'contender',
   dataFound: true,
@@ -61,7 +61,7 @@ export const LATEST_VERIFIED_AWARDS: AwardData = {
         { id: 'nom-asl-1', movieTitle: "If I Had Legs I'd Kick You", individualName: 'Rose Byrne', isWinner: false, predictionRank: 0, seen: false },
         { id: 'nom-asl-2', movieTitle: 'Song Sung Blue', individualName: 'Kate Hudson', isWinner: false, predictionRank: 0, seen: false },
         { id: 'nom-asl-3', movieTitle: 'Sentimental Value', individualName: 'Renate Reinsve', isWinner: false, predictionRank: 0, seen: false },
-        { id: 'nom-asl-4', movieTitle: 'Bugonia', individualName: 'Emma Stone', isWinner: false, predictionRank: 0, seen: false }
+        { id: 'nom-al-4', movieTitle: 'Bugonia', individualName: 'Emma Stone', isWinner: false, predictionRank: 0, seen: false }
       ]
     },
     {

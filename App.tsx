@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { AwardData, ViewMode, FilterMode, Nominee, AwardStatus } from './types';
 import MovieDetailModal from './components/MovieDetailModal';
 import AwardSearch from './components/AwardSearch';
-import { fetchAwardData } from './services/geminiService';
+import RoastModal from './components/RoastModal';
+import { fetchAwardData, generateRedCarpetRoast } from './services/geminiService';
 import { LATEST_VERIFIED_AWARDS } from './constants';
 
 const getPosterUrl = (title: string, size: 'small' | 'large' = 'small') => {
@@ -20,7 +22,14 @@ const App: React.FC = () => {
   const [expandedMovies, setExpandedMovies] = useState<Set<string>>(new Set());
   const [showSearch, setShowSearch] = useState(false);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
+  const [now, setNow] = useState(Date.now());
   
+  // Roast States
+  const [showRoastModal, setShowRoastModal] = useState(false);
+  const [roastText, setRoastText] = useState('');
+  const [isRoasting, setIsRoasting] = useState(false);
+  const [hasRoastedIds, setHasRoastedIds] = useState<Set<string>>(new Set());
+
   const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === "undefined" || process.env.API_KEY === "MISSING";
 
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
@@ -29,6 +38,33 @@ const App: React.FC = () => {
     }
     return new Set();
   });
+
+  // Countdown and Lockdown logic
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isLocked = useMemo(() => {
+    if (!currentAward || !currentAward.ceremonyDate) return false;
+    const ceremonyTime = new Date(currentAward.ceremonyDate).getTime();
+    return now >= ceremonyTime;
+  }, [currentAward, now]);
+
+  const timeLeft = useMemo(() => {
+    if (!currentAward || !currentAward.ceremonyDate) return null;
+    const diff = new Date(currentAward.ceremonyDate).getTime() - now;
+    if (diff <= 0) return null;
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    return { days, hours, minutes, seconds };
+  }, [currentAward, now]);
 
   useEffect(() => {
     const saved = localStorage.getItem('fyc_interactions_v2');
@@ -48,6 +84,14 @@ const App: React.FC = () => {
         });
       });
       if (changed) setCurrentAward(newData);
+    }
+    
+    // Load roast memory
+    const savedRoasts = localStorage.getItem('fyc_roasts_v2');
+    if (savedRoasts) {
+        const { text, ids } = JSON.parse(savedRoasts);
+        setRoastText(text || '');
+        setHasRoastedIds(new Set(ids || []));
     }
   }, [currentAward?.id]);
 
@@ -69,6 +113,61 @@ const App: React.FC = () => {
       localStorage.setItem('fyc_interactions_v2', JSON.stringify(interactions));
     }
   }, [currentAward]);
+
+  const predictions = useMemo(() => {
+    if (!currentAward) return [];
+    return currentAward.categories.map(cat => ({
+      category: cat,
+      pick: cat.nominees.find(n => n.predictionRank === 1)
+    })).filter(p => !!p.pick);
+  }, [currentAward]);
+
+  const stats = useMemo(() => {
+    const totalAnnounced = predictions.filter(p => p.pick?.userResult === 'correct' || p.pick?.userResult === 'incorrect').length;
+    const totalWins = predictions.filter(p => p.pick?.userResult === 'correct').length;
+    const totalPredictions = predictions.length;
+    return { totalWins, totalAnnounced, totalPredictions };
+  }, [predictions]);
+
+  // Roast Trigger Logic
+  useEffect(() => {
+    if (stats.totalPredictions > 0 && stats.totalAnnounced === stats.totalPredictions && currentAward) {
+      const roastId = `${currentAward.id}_${stats.totalWins}_${stats.totalAnnounced}`;
+      if (!hasRoastedIds.has(roastId)) {
+        handleTriggerRoast();
+      }
+    }
+  }, [stats.totalAnnounced, stats.totalPredictions, currentAward?.id]);
+
+  const handleTriggerRoast = async () => {
+    if (!currentAward) return;
+    setIsRoasting(true);
+    setShowRoastModal(true);
+    
+    const hits = predictions.filter(p => p.pick?.userResult === 'correct').map(p => p.pick!.movieTitle);
+    const misses = predictions.filter(p => p.pick?.userResult === 'incorrect').map(p => p.pick!.movieTitle);
+
+    try {
+      const roast = await generateRedCarpetRoast(
+        currentAward.name,
+        currentAward.year,
+        stats.totalWins,
+        stats.totalAnnounced,
+        hits,
+        misses
+      );
+      setRoastText(roast);
+      const roastId = `${currentAward.id}_${stats.totalWins}_${stats.totalAnnounced}`;
+      const newIds = new Set(hasRoastedIds).add(roastId);
+      setHasRoastedIds(newIds);
+      localStorage.setItem('fyc_roasts_v2', JSON.stringify({ text: roast, ids: Array.from(newIds) }));
+    } catch (error) {
+      console.error("Roast failed:", error);
+      setRoastText("Oh grow up! Your internet connection is as flimsy as a starlet's excuses. Come back when you're online, darling!");
+    } finally {
+      setIsRoasting(false);
+    }
+  };
 
   const handleSearch = async (awardName: string, year: number) => {
     if (isApiKeyMissing) {
@@ -128,7 +227,7 @@ const App: React.FC = () => {
   };
 
   const handleRank = (categoryId: string, nomineeId: string, rank: number) => {
-    if (!currentAward) return;
+    if (!currentAward || isLocked) return;
     const newData = { ...currentAward };
     const category = newData.categories.find(c => c.id === categoryId);
     if (category) {
@@ -140,6 +239,19 @@ const App: React.FC = () => {
       });
       nominee.predictionRank = isAlreadyThisRank ? 0 : rank;
       setCurrentAward({ ...newData });
+    }
+  };
+
+  const handleSetResult = (categoryId: string, nomineeId: string, result: 'correct' | 'incorrect') => {
+    if (!currentAward) return;
+    const newData = { ...currentAward };
+    const category = newData.categories.find(c => c.id === categoryId);
+    if (category) {
+      const nominee = category.nominees.find(n => n.id === nomineeId);
+      if (nominee) {
+        nominee.userResult = nominee.userResult === result ? 'pending' : result;
+        setCurrentAward({ ...newData });
+      }
     }
   };
 
@@ -200,14 +312,6 @@ const App: React.FC = () => {
     return Object.values(groups).sort((a, b) => b.nominations.length - a.nominations.length);
   }, [currentAward, filterMode, categorySearch]);
 
-  const predictions = useMemo(() => {
-    if (!currentAward) return [];
-    return currentAward.categories.map(cat => ({
-      category: cat,
-      pick: cat.nominees.find(n => n.predictionRank === 1)
-    })).filter(p => !!p.pick);
-  }, [currentAward]);
-
   const getStatusBadge = (status: AwardStatus) => {
     switch (status) {
       case 'official': return <span className="bg-yellow-600/20 text-yellow-500 border border-yellow-600/30 px-2.5 py-1 rounded text-[11px] font-bold tracking-tight">OFFICIAL</span>;
@@ -233,20 +337,64 @@ const App: React.FC = () => {
              <div className="min-w-0">
                 <h1 className="text-xl md:text-2xl font-black tracking-tighter text-white leading-none serif gold-gradient uppercase truncate">For Your Consideration</h1>
                 {currentAward && (
-                  <div className="mt-2 space-y-1.5 flex items-center gap-3">
+                  <div className="mt-2 space-y-1.5 flex flex-col items-start">
                     <p className="text-stone-400 text-[11px] md:text-xs uppercase font-bold tracking-[0.15em] truncate">{currentAward.name} {currentAward.year}</p>
                     {getStatusBadge(currentAward.status)}
                   </div>
                 )}
              </div>
           </div>
-          <button 
-            onClick={() => setShowSearch(!showSearch)}
-            className={`p-2 rounded-xl border transition-all ${showSearch ? 'bg-yellow-600 border-yellow-500 text-stone-950' : 'bg-stone-900 border-stone-800 text-stone-400 hover:text-white'}`}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
+          
+          {/* Timer Section */}
+          {!showSearch && currentAward && currentAward.ceremonyDate && (
+            <div className="hidden md:flex flex-col items-end text-right">
+              {isLocked ? (
+                <div className="flex items-center gap-2 bg-red-950/30 border border-red-900/50 px-3 py-1.5 rounded-lg">
+                  <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-red-400">Picks Locked</span>
+                </div>
+              ) : timeLeft && (
+                <div className="flex flex-col items-end">
+                   <p className="text-[9px] uppercase font-black tracking-widest text-stone-500 mb-1">T-Minus Ceremony</p>
+                   <div className="flex gap-2 font-mono text-sm font-bold text-yellow-500/90">
+                      <span>{String(timeLeft.days).padStart(2, '0')}d</span>
+                      <span className="animate-pulse">:</span>
+                      <span>{String(timeLeft.hours).padStart(2, '0')}h</span>
+                      <span className="animate-pulse">:</span>
+                      <span>{String(timeLeft.minutes).padStart(2, '0')}m</span>
+                      <span className="animate-pulse">:</span>
+                      <span>{String(timeLeft.seconds).padStart(2, '0')}s</span>
+                   </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+        
+        {/* Mobile Timer Bar */}
+        {!showSearch && currentAward && currentAward.ceremonyDate && (
+          <div className="md:hidden mt-4 pt-3 border-t border-stone-800 flex items-center justify-between">
+            {isLocked ? (
+              <div className="flex items-center gap-2 text-red-500">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                <span className="text-[9px] font-black uppercase tracking-[0.2em]">Ballot Closed</span>
+              </div>
+            ) : timeLeft && (
+              <div className="flex items-center justify-between w-full">
+                <span className="text-[9px] uppercase font-black tracking-[0.2em] text-stone-500">T-Minus</span>
+                <div className="flex gap-1.5 font-mono text-[10px] font-bold text-yellow-500/90">
+                  <span>{timeLeft.days}d</span>
+                  <span className="opacity-50">:</span>
+                  <span>{String(timeLeft.hours).padStart(2, '0')}h</span>
+                  <span className="opacity-50">:</span>
+                  <span>{String(timeLeft.minutes).padStart(2, '0')}m</span>
+                  <span className="opacity-50">:</span>
+                  <span>{String(timeLeft.seconds).padStart(2, '0')}s</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-4">
@@ -342,13 +490,16 @@ const App: React.FC = () => {
                                     </button>
                                   </div>
                                   <div className="mt-3 flex items-center justify-between pt-2 border-t border-white/5">
-                                    <span className="text-[11px] uppercase font-black text-stone-500 tracking-widest">Predict</span>
+                                    <span className="text-[11px] uppercase font-black text-stone-500 tracking-widest">
+                                      {isLocked ? 'Closed' : 'Predict'}
+                                    </span>
                                     <div className="flex gap-1.5">
                                       {[1, 2, 3].map(r => (
                                         <button 
                                           key={r}
+                                          disabled={isLocked}
                                           onClick={() => handleRank(cat.id, nom.id, r)}
-                                          className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-black transition-all ${nom.predictionRank === r ? 'bg-yellow-600 text-stone-950 shadow-sm' : 'bg-stone-800 text-stone-400 hover:text-white'}`}
+                                          className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-black transition-all ${isLocked && nom.predictionRank !== r ? 'opacity-20 pointer-events-none' : ''} ${nom.predictionRank === r ? 'bg-yellow-600 text-stone-950 shadow-sm' : 'bg-stone-800 text-stone-400 hover:text-white disabled:hover:text-stone-400'}`}
                                         >
                                           {r}
                                         </button>
@@ -426,7 +577,28 @@ const App: React.FC = () => {
               <div className="max-w-4xl mx-auto space-y-4 animate-in fade-in duration-500">
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-black serif text-white mb-2 tracking-tight">The Winners Circle</h2>
-                  <p className="text-stone-400 text-[11px] md:text-xs font-bold uppercase tracking-widest">Your Predictions for {currentAward.name}</p>
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-stone-400 text-[11px] md:text-xs font-bold uppercase tracking-widest">Your Predictions for {currentAward.name}</p>
+                    {stats.totalAnnounced > 0 && (
+                      <div className="flex flex-col items-center gap-3 mt-2">
+                        <div className="bg-yellow-600/10 border border-yellow-600/30 px-4 py-1.5 rounded-full">
+                          <span className="text-xs font-black uppercase tracking-[0.2em] gold-gradient">
+                            Score: {stats.totalWins} / {stats.totalAnnounced}
+                          </span>
+                        </div>
+                        {roastText && !isRoasting && (
+                          <button 
+                            onClick={() => setShowRoastModal(true)}
+                            className="bg-gradient-to-r from-fuchsia-600/20 to-pink-600/20 hover:from-fuchsia-600/40 hover:to-pink-600/40 border border-fuchsia-500/30 px-5 py-2 rounded-full transition-all group shadow-lg"
+                          >
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-fuchsia-400 group-hover:text-white transition-colors">
+                              Review Red Carpet Roast
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {predictions.length === 0 ? (
                   <div className="py-20 text-center border-2 border-dashed border-stone-800 rounded-3xl">
@@ -436,19 +608,38 @@ const App: React.FC = () => {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {predictions.map(pred => (
-                      <div key={pred.category.id} className="bg-stone-900 border border-stone-800 rounded-2xl p-4 hover:border-yellow-600/30 transition-all flex gap-4 shadow-xl">
-                        <div className="w-16 h-24 bg-stone-950 rounded-xl overflow-hidden flex-shrink-0 shadow-lg">
-                          <img src={getPosterUrl(pred.pick!.movieTitle)} alt="" className="w-full h-full object-cover" />
+                      <div key={pred.category.id} className="bg-stone-900 border border-stone-800 rounded-2xl p-4 hover:border-yellow-600/30 transition-all flex flex-col gap-4 shadow-xl">
+                        <div className="flex gap-4">
+                          <div className="w-16 h-24 bg-stone-950 rounded-xl overflow-hidden flex-shrink-0 shadow-lg">
+                            <img src={getPosterUrl(pred.pick!.movieTitle)} alt="" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-1 flex flex-col justify-center min-w-0">
+                             <h3 className="text-[11px] uppercase tracking-[0.2em] text-stone-400 font-black mb-2.5 truncate">{pred.category.name}</h3>
+                             <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-yellow-600/10 border border-yellow-600/30 rounded-full flex items-center justify-center text-yellow-500 font-black text-sm italic flex-shrink-0 shadow-inner">1</div>
+                                <div className="min-w-0">
+                                  <p className="text-white font-bold text-base leading-tight serif truncate">{pred.pick!.movieTitle}</p>
+                                  <p className="text-[11px] text-stone-400 mt-1 font-bold uppercase tracking-wider truncate">{pred.pick!.individualName || 'Official Candidate'}</p>
+                                </div>
+                             </div>
+                          </div>
                         </div>
-                        <div className="flex-1 flex flex-col justify-center min-w-0">
-                           <h3 className="text-[11px] uppercase tracking-[0.2em] text-stone-400 font-black mb-2.5 truncate">{pred.category.name}</h3>
-                           <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-yellow-600/10 border border-yellow-600/30 rounded-full flex items-center justify-center text-yellow-500 font-black text-sm italic flex-shrink-0 shadow-inner">1</div>
-                              <div className="min-w-0">
-                                <p className="text-white font-bold text-base leading-tight serif truncate">{pred.pick!.movieTitle}</p>
-                                <p className="text-[11px] text-stone-400 mt-1 font-bold uppercase tracking-wider truncate">{pred.pick!.individualName || 'Official Candidate'}</p>
-                              </div>
-                           </div>
+                        <div className="pt-3 border-t border-stone-800 flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Result</span>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleSetResult(pred.category.id, pred.pick!.id, 'correct')}
+                              className={`px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${pred.pick?.userResult === 'correct' ? 'bg-green-600 text-stone-950 border-green-500' : 'bg-stone-800 text-stone-400 border-stone-700 hover:text-green-400'}`}
+                            >
+                              Winner
+                            </button>
+                            <button 
+                              onClick={() => handleSetResult(pred.category.id, pred.pick!.id, 'incorrect')}
+                              className={`px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${pred.pick?.userResult === 'incorrect' ? 'bg-red-600 text-stone-950 border-red-500' : 'bg-stone-800 text-stone-400 border-stone-700 hover:text-red-400'}`}
+                            >
+                              Lost
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -473,6 +664,14 @@ const App: React.FC = () => {
           yearHint={selectedMovie.year} 
           countryHint={selectedMovie.country} 
           onClose={() => setSelectedMovie(null)} 
+        />
+      )}
+
+      {showRoastModal && (
+        <RoastModal 
+          roast={roastText} 
+          isLoading={isRoasting} 
+          onClose={() => setShowRoastModal(false)} 
         />
       )}
 

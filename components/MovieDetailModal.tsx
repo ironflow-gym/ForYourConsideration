@@ -110,17 +110,31 @@ const MovieDetailModal: React.FC<MovieDetailModalProps> = ({ title, yearHint, co
               </div>
               
               <div className="mt-auto pt-8 border-t border-stone-800 flex flex-wrap items-center justify-between gap-4">
-                <a 
-                  href={`https://www.google.com/search?q=${encodeURIComponent(details.title + ' movie')}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 bg-stone-800 hover:bg-stone-700 text-white px-5 py-2.5 rounded-xl text-sm font-black tracking-wide uppercase transition-all"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                  </svg>
-                  Search Web
-                </a>
+                <div className="flex flex-wrap gap-3">
+                  <a 
+                    href={`https://www.google.com/search?q=${encodeURIComponent(details.title + ' movie')}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-stone-800 hover:bg-stone-700 text-white px-5 py-2.5 rounded-xl text-sm font-black tracking-wide uppercase transition-all"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    Search Web
+                  </a>
+
+                  <a 
+                    href={`https://www.justwatch.com/us/search?q=${encodeURIComponent(details.title + ' ' + details.year)}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-stone-800 hover:bg-stone-700 text-white px-5 py-2.5 rounded-xl text-sm font-black tracking-wide uppercase transition-all border border-stone-700 hover:border-yellow-600/30"
+                  >
+                    <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    JustWatch
+                  </a>
+                </div>
 
                 <button 
                   onClick={onClose}

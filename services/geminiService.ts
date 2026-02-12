@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AwardData, MovieDetails } from "../types";
 
@@ -47,6 +48,7 @@ export const fetchAwardData = async (awardName: string, year: number): Promise<A
 
   3. RESPONSE:
      - Return valid JSON. All 20+ major categories if possible.
+     - Include the exact ceremony broadcast start date and time as 'ceremonyDate' in ISO 8601 UTC format.
   `;
 
   const response = await ai.models.generateContent({
@@ -60,6 +62,7 @@ export const fetchAwardData = async (awardName: string, year: number): Promise<A
         properties: {
           name: { type: Type.STRING },
           year: { type: Type.NUMBER },
+          ceremonyDate: { type: Type.STRING, description: "ISO 8601 UTC timestamp of the ceremony start" },
           announced: { type: Type.BOOLEAN },
           status: { type: Type.STRING, enum: ["official", "shortlist", "contender"] },
           dataFound: { type: Type.BOOLEAN },
@@ -170,4 +173,32 @@ export const fetchMovieDetails = async (title: string, year?: number, country?: 
 
   localStorage.setItem(cacheKey, JSON.stringify(finalResult));
   return finalResult;
+};
+
+/**
+ * Generates a Joan Rivers style roast based on user prediction performance.
+ */
+export const generateRedCarpetRoast = async (
+  awardName: string, 
+  year: number, 
+  score: number, 
+  total: number, 
+  hits: string[], 
+  misses: string[]
+): Promise<string> => {
+  const ai = getAI();
+  const prompt = `You are a legendary, sharp-tongued Red Carpet critic in the style of Joan Rivers. The user has just finished their movie award predictions for the ${awardName} ${year}. 
+  
+  Score: ${score} out of ${total}. 
+  Correct picks: ${hits.join(', ')}. 
+  Incorrect picks: ${misses.join(', ')}. 
+  
+  Give them a waspish, funny, 3-sentence critique of their cinematic taste. Use fashion metaphors. Be brutally honest but hilarious. If they did well, be begrudgingly impressed. If they did poorly, treat it like a wardrobe malfunction on a global stage. Start with a classic Joan-style greeting like "Oh grow up!" or "Can we talk?".`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: prompt,
+  });
+
+  return response.text || "Oh grow up! I'm too stunned by these picks to even speak. Try again when you've developed some taste, darling.";
 };

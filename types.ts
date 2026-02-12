@@ -21,6 +21,7 @@ export interface AwardData {
   id: string;
   name: string;
   year: number;
+  ceremonyDate?: string; // ISO 8601 UTC string
   announced: boolean; // whether winners have been revealed
   status: AwardStatus; // The reliability level of this data
   categories: Category[];
